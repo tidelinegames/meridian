@@ -4,9 +4,9 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1791998826|3966878';
+const CACHE_VERSION = '1792301284|1853169';
 /** @type {string} */
-const CACHE_PREFIX = 'Meridian-sw-cache-';
+const CACHE_PREFIX = 'Meridian-sw-cache-' + encodeURIComponent(new URL(self.registration.scope).pathname) + '-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 /** @type {string} */
 const OFFLINE_URL = 'index.offline.html';
@@ -14,7 +14,7 @@ const OFFLINE_URL = 'index.offline.html';
 const ENSURE_CROSSORIGIN_ISOLATION_HEADERS = false;
 // Files that will be cached on load.
 /** @type {string[]} */
-const CACHED_FILES = ["index.html","index.js","index.offline.html","index.icon.png","index.apple-touch-icon.png","index.audio.worklet.js","index.audio.position.worklet.js"];
+const CACHED_FILES = ["index.html","index.js","index.offline.html","index.icon.png","index.apple-touch-icon.png","index.audio.worklet.js","index.audio.position.worklet.js","phone.js","runtime.js","nunito.ttf"];
 // Files that we might not want the user to preload, and will only be cached on first load.
 /** @type {string[]} */
 const CACHEABLE_FILES = ["index.wasm","index.pck"];
@@ -121,7 +121,10 @@ self.addEventListener(
 						}
 					}
 				}
-				let cached = await cache.match(event.request);
+				const requestURL = new URL(event.request.url);
+                const indexURL = new URL('index.html', self.registration.scope);
+                const appNavigation = isNavigate && (requestURL.pathname === new URL(self.registration.scope).pathname || requestURL.pathname === indexURL.pathname);
+                let cached = await cache.match(appNavigation ? indexURL.href : event.request, {ignoreSearch: appNavigation});
 				if (cached != null) {
 					if (ENSURE_CROSSORIGIN_ISOLATION_HEADERS) {
 						cached = ensureCrossOriginIsolationHeaders(cached);
@@ -164,3 +167,14 @@ self.addEventListener('message', (event) => {
 	});
 });
 
+
+self.addEventListener('message', event => {
+      if (event.origin === self.location.origin && event.data === 'cache') {
+        event.waitUntil((async () => {
+          const cache = await caches.open(CACHE_NAME);
+          const missing = [];
+          for (const name of FULL_CACHE) if (!(await cache.match(name))) missing.push(name);
+          if (missing.length) await cache.addAll(missing);
+        })());
+      }
+    });

@@ -143,11 +143,15 @@ body {
 	text-align: center;
 	z-index: 1;
 }
-		</style>
+		#start-button {
+ display: none; margin: 16px auto 0; padding: 14px 32px; border: 0; border-radius: 14px;
+ background: #ffcd32; color: #132437; font: 900 22px Nunito, sans-serif; cursor: pointer;
+}
+</style>
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
 <link rel="manifest" href="index.manifest.json">
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><script src="phone.js"></script>
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><script src="phone.js"></script><script src="runtime.js"></script>
 	</head>
 	<body>
 		<canvas id="canvas">
@@ -161,13 +165,13 @@ body {
 		<div id="status">
 			<canvas id="tide"></canvas>
 			<div id="wordmark"><div class="tideline">TIDELINE</div><div class="games">GAMES</div></div>
-			<div id="loadline"><div class="what"></div><div class="first"></div></div>
+			<div id="loadline"><div class="what"></div><div class="first"></div><button id="start-button" type="button">Tap to start</button></div>
 			<div id="status-notice"></div>
 		</div>
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":30464420,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":8066436,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
@@ -181,10 +185,11 @@ const engine = new Engine(GODOT_CONFIG);
 	// saved copy yet) also says why it takes a moment (Mike, 2026-10-14).
 	const loadWhat = document.querySelector('#loadline .what');
 	const loadFirst = document.querySelector('#loadline .first');
+	const startButton = document.getElementById("start-button");
 	const firstVisit = !('serviceWorker' in navigator && navigator.serviceWorker.controller);
 	loadWhat.textContent = 'Loading Meridian…';
 	if (firstVisit) {
-		loadFirst.textContent = 'First visit: the game downloads once. After that it opens in seconds, even offline.';
+		loadFirst.textContent = 'First visit: downloading the game. Your browser can save it for offline play.';
 	}
 	function showBytes(current, total) {
 		const mb = (b) => Math.max(1, Math.round(b / 1048576));
@@ -315,26 +320,26 @@ const engine = new Engine(GODOT_CONFIG);
 	// used from the next launch. Never earlier: taking over mid-load mixed the new build's
 	// files with the old engine and the game hung on a dark screen.
 	function takeUpdate() {
-		if (!('serviceWorker' in navigator)) {
-			return;
-		}
-		navigator.serviceWorker.getRegistration().then((reg) => {
-			if (!reg) {
-				return;
-			}
-			const take = (w) => w && w.postMessage('claim');
-			if (reg.waiting && navigator.serviceWorker.controller) {
-				take(reg.waiting);
-			}
-			reg.addEventListener('updatefound', () => {
-				const w = reg.installing;
-				w.addEventListener('statechange', () => {
-					if (w.state === 'installed' && navigator.serviceWorker.controller) {
-						take(w);
-					}
+		if (!('serviceWorker' in navigator)) return;
+		// startGame starts registration without awaiting it. A first visit must wait
+		// for that registration before asking the worker to save the engine files.
+		engine.installServiceWorker().then(reg => {
+			if (!reg || reg.scope !== window.MeridianWeb.scope) return;
+			const take = worker => {
+				if (!worker) return;
+				worker.postMessage('claim');
+				worker.postMessage('cache');
+			};
+			const watch = worker => {
+				if (!worker) return;
+				worker.addEventListener('statechange', () => {
+					if (worker.state === 'installed' || worker.state === 'activated') take(worker);
 				});
-			});
-			reg.update();
+			};
+			take(reg.waiting || reg.active);
+			watch(reg.installing);
+			reg.addEventListener('updatefound', () => watch(reg.installing));
+			reg.update().catch(() => {});
 		}).catch(() => {});
 	}
 
@@ -406,11 +411,7 @@ const engine = new Engine(GODOT_CONFIG);
 			if (healed) {
 				return;
 			}
-			const regs = 'serviceWorker' in navigator ? navigator.serviceWorker.getRegistrations() : Promise.resolve([]);
-			Promise.all([
-				regs.then((rs) => Promise.all(rs.map((r) => r.unregister()))),
-				'caches' in window ? caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k)))) : null,
-			]).catch(() => {}).then(() => window.location.reload());
+			window.MeridianWeb.recover().catch(() => {}).then(() => window.location.reload());
 		}, 2000);
 		setStatusMode('progress');
 		engine.startGame({
@@ -422,7 +423,14 @@ const engine = new Engine(GODOT_CONFIG);
 			},
 		}).then(() => {
 			started = true;
-			setStatusMode('hidden');
+			loadWhat.textContent = 'Ready to explore';
+			loadFirst.textContent = 'Sound starts when you tap.';
+			startButton.style.display = 'block';
+			startButton.addEventListener('click', () => {
+				if (window.meridianAudioUnlock) window.meridianAudioUnlock();
+				setStatusMode('hidden');
+				document.getElementById('canvas').focus();
+			}, {once: true});
 			takeUpdate();
 		}, displayFailureNotice);
 	}
