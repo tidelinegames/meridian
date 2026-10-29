@@ -169,9 +169,11 @@ body {
 			<div id="status-notice"></div>
 		</div>
 
+		<script src="analytics-config.js"></script>
+		<script src="analytics.js"></script>
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":8066436,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":8066916,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
@@ -423,10 +425,12 @@ const engine = new Engine(GODOT_CONFIG);
 			},
 		}).then(() => {
 			started = true;
+			window.MeridianAnalytics?.track('game_ready');
 			loadWhat.textContent = 'Ready to explore';
 			loadFirst.textContent = 'Sound starts when you tap.';
 			startButton.style.display = 'block';
 			startButton.addEventListener('click', () => {
+				window.MeridianAnalytics?.track('play_started');
 				if (window.meridianAudioUnlock) window.meridianAudioUnlock();
 				setStatusMode('hidden');
 				document.getElementById('canvas').focus();
